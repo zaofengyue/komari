@@ -12,6 +12,7 @@ on:
 permissions:
   contents: read
   packages: write
+  actions: write
 
 env:
   REGISTRY: ghcr.io
@@ -77,6 +78,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: write
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -149,4 +151,107 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Cleanup old workflow runs and old package versions
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const currentRunId = context.runId;
+
+            // 1. 清理历史工作流运行记录（保留当前这一次，其余一个不留）
+            console.log('--- 开始清理历史工作流运行记录 ---');
+            try {
+              let hasMore = true;
+              while (hasMore) {
+                const { data } = await github.rest.actions.listWorkflowRunsForRepo({
+                  owner,
+                  repo,
+                  per_page: 50,
+                  page: 1
+                });
+                const runs = data.workflow_runs.filter(r => r.id !== currentRunId);
+                if (!runs || runs.length === 0) {
+                  hasMore = false;
+                  break;
+                }
+                for (const run of runs) {
+                  try {
+                    await github.rest.actions.deleteWorkflowRun({
+                      owner,
+                      repo,
+                      run_id: run.id
+                    });
+                    console.log(`已删除工作流记录 ID: ${run.id} (${run.name})`);
+                  } catch (e) {
+                    console.log(`删除记录 ${run.id} 失败: ${e.message}`);
+                  }
+                }
+                if (data.workflow_runs.length < 50) {
+                  hasMore = false;
+                }
+              }
+              console.log('--- 历史工作流运行记录清理完毕 ---');
+            } catch (err) {
+              console.log(`清理工作流运行记录出现异常: ${err.message}`);
+            }
+
+            // 2. 清理旧镜像版本（只保留含有 latest 标签的版本）
+            console.log('--- 开始清理旧镜像版本 ---');
+            const packageName = repo.toLowerCase();
+            try {
+              let versions = [];
+              try {
+                const res = await github.rest.packages.getAllPackageVersionsForPackageOwnedByUser({
+                  package_type: 'container',
+                  package_name: packageName,
+                  username: owner
+                });
+                versions = res.data;
+              } catch (e1) {
+                try {
+                  const res = await github.rest.packages.getAllPackageVersionsForPackageOwnedByAuthenticatedUser({
+                    package_type: 'container',
+                    package_name: packageName
+                  });
+                  versions = res.data;
+                } catch (e2) {
+                  console.log(`获取 package 列表失败: ${e2.message}`);
+                }
+              }
+
+              for (const ver of versions) {
+                const tags = ver.metadata?.container?.tags || [];
+                if (!tags.includes('latest')) {
+                  try {
+                    await github.rest.packages.deletePackageVersionForUser({
+                      package_type: 'container',
+                      package_name: packageName,
+                      username: owner,
+                      package_version_id: ver.id
+                    });
+                    console.log(`已删除旧镜像版本 ID: ${ver.id}，标签: [${tags.join(', ')}]`);
+                  } catch (e3) {
+                    try {
+                      await github.rest.packages.deletePackageVersionForAuthenticatedUser({
+                        package_type: 'container',
+                        package_name: packageName,
+                        package_version_id: ver.id
+                      });
+                      console.log(`已删除旧镜像版本 ID: ${ver.id}，标签: [${tags.join(', ')}]`);
+                    } catch (e4) {
+                      console.log(`删除版本 ${ver.id} 遇到权限或API限制: ${e4.message}`);
+                    }
+                  }
+                } else {
+                  console.log(`保留最新镜像版本 ID: ${ver.id}，标签: [${tags.join(', ')}]`);
+                }
+              }
+              console.log('--- 旧镜像版本清理完毕 ---');
+            } catch (err) {
+              console.log(`清理镜像版本出现异常: ${err.message}`);
+            }
 
