@@ -139,10 +139,7 @@ jobs:
         with:
           images: ${{ steps.target-images.outputs.images }}
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
-            type=ref,event=branch
-            type=ref,event=tag
-            type=sha,format=short
+            type=raw,value=latest
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
