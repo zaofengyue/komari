@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
   actions: write
 
@@ -60,23 +60,36 @@ jobs:
           VERSION_HASH="${{ github.sha }}"
           LDFLAGS="-s -w -X github.com/komari-monitor/komari/utils.CurrentVersion=${VERSION} -X github.com/komari-monitor/komari/utils.VersionHash=${VERSION_HASH}"
 
-          echo "Building for linux/amd64..."
+          echo "Building for linux/amd64 (Alwaysdata / Linux VPS)..."
           GOARCH=amd64 CC="zig cc -target x86_64-linux-musl" go build -trimpath -ldflags="$LDFLAGS" -o komari-linux-amd64
 
-          echo "Building for linux/arm64..."
+          echo "Building for linux/arm64 (ARM Linux)..."
           GOARCH=arm64 CC="zig cc -target aarch64-linux-musl" go build -trimpath -ldflags="$LDFLAGS" -o komari-linux-arm64
 
-      - name: Upload Docker binaries
+          echo "Building for freebsd/amd64 (CT8 / Serv00)..."
+          GOOS=freebsd GOARCH=amd64 CC="zig cc -target x86_64-freebsd" go build -trimpath -ldflags="$LDFLAGS" -o komari-freebsd-amd64 || true
+
+          # 打包 Release 独立安装包（供 CT8、Alwaysdata 等免 Docker 环境直接运行）
+          mkdir -p release-assets
+          cp komari-linux-amd64 komari && tar -czf release-assets/komari-linux-amd64.tar.gz komari && rm -f komari
+          cp komari-linux-arm64 komari && tar -czf release-assets/komari-linux-arm64.tar.gz komari && rm -f komari
+          if [ -f komari-freebsd-amd64 ]; then
+            cp komari-freebsd-amd64 komari && tar -czf release-assets/komari-freebsd-amd64.tar.gz komari && rm -f komari
+          fi
+
+      - name: Upload Docker and Release binaries
         uses: actions/upload-artifact@v4
         with:
           name: komari-docker-binaries
-          path: komari-linux-*
+          path: |
+            komari-linux-*
+            release-assets/*
 
   build-and-push-multi-arch:
     needs: build-docker-binaries
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
       actions: write
     env:
@@ -151,6 +164,37 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Publish Release Assets for CT8 / Alwaysdata
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        with:
+          tag_name: latest
+          name: "Komari 最新免安装预编译包 (Linux / CT8 / Alwaysdata)"
+          body: |
+            适用于无 Docker 环境的独立预编译二进制压缩包（CT8、Alwaysdata、Serv00、普通 Linux VPS 虚拟主机等）。
+
+            ### 📦 包含架构：
+            - `komari-linux-amd64.tar.gz`: 纯静态 musl 链接（推荐 Alwaysdata 及绝大多数 Linux 64位机器）
+            - `komari-linux-arm64.tar.gz`: 纯静态 arm64（推荐 Oracle ARM、树莓派等）
+            - `komari-freebsd-amd64.tar.gz`: FreeBSD 64位原生（推荐 CT8 / Serv00 原生环境）
+
+            ### 🚀 快速使用指南：
+            ```bash
+            # 1. 下载并解压（以 linux-amd64 为例）
+            wget https://github.com/zaofengyue/komari/releases/download/latest/komari-linux-amd64.tar.gz
+            tar -zxvf komari-linux-amd64.tar.gz
+            chmod +x komari
+
+            # 2. 启动服务（指定分配给你的端口，例如 3000 或 8100）
+            PORT=3000 ./komari server
+
+            # 3. 后台挂载运行（退出终端不中断）
+            nohup env PORT=3000 ./komari server > komari.log 2>&1 &
+            ```
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cleanup old workflow runs and old package versions
         if: always()
