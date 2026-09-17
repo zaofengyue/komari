@@ -10,4 +10,4 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - GIN_MODE=release
-      - KOMARI_LISTEN=0.0.0.0:25774
+      - PORT=25774

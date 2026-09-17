@@ -21,7 +21,7 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - GIN_MODE=release
-      - KOMARI_LISTEN=0.0.0.0:25774
+      - PORT=25774
 ```
 
 启动命令：
@@ -37,10 +37,11 @@ docker compose up -d
 
 | 环境变量 | 默认值 | 说明 |
 | :--- | :--- | :--- |
+| `PORT` | `25774` | **服务端监听端口**。支持只输入纯端口（如 `3000`），程序会自动监听 `0.0.0.0:<PORT>`，适配所有主流容器及 PaaS 云平台。 |
 | `TZ` | `Asia/Shanghai` | 容器时区设置。确保监控指标时间与日志时间显示正确。 |
 | `GIN_MODE` | `release` | Web 框架运行模式。可选 `release`（生产推荐）或 `debug`（详细调试日志）。 |
-| `KOMARI_LISTEN` | `0.0.0.0:25774` | 服务端监听绑定的 IP 与端口。容器内一般保持 `0.0.0.0:25774`。 |
 | `KOMARI_WS_DISABLE_ORIGIN` | `false` | 是否禁用 WebSocket 连接的 Origin 跨域检查。设为 `true` 可解决通过复杂反向代理、CDN 或内网穿透访问时的 WebSocket 连接 403 跨域阻断问题。 |
+| `KOMARI_LISTEN` | - | （已兼容）完整监听地址格式，如 `0.0.0.0:25774`。通常使用更简洁的 `PORT` 即可。 |
 
 ## 🛠️ 项目结构
 

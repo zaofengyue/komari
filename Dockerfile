@@ -15,7 +15,7 @@ COPY --chmod=755 komari-${TARGETOS}-${TARGETARCH} /app/komari
 
 # 环境变量设置
 ENV GIN_MODE=release \
-    KOMARI_LISTEN=0.0.0.0:25774 \
+    PORT=25774 \
     TZ=Asia/Shanghai
 
 # 持久化数据目录
@@ -26,7 +26,7 @@ EXPOSE 25774
 
 # 健康检查探针
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:25774/api/version || exit 1
+    CMD curl -f "http://localhost:${PORT:-25774}/api/version" || exit 1
 
 # 启动服务器
 CMD ["/app/komari", "server"]

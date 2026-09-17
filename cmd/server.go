@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"os"
+	"strings"
 
 	appserver "github.com/komari-monitor/komari/internal/server"
 	logger "github.com/komari-monitor/komari/utils/log"
@@ -20,10 +21,28 @@ var ServerCmd = &cobra.Command{
 	},
 }
 
+func resolveListenAddr() string {
+	// 优先支持通用的 PORT 环境变量（支持纯端口如 "3000" 或 ":3000" 或 "0.0.0.0:3000"）
+	if port := strings.TrimSpace(os.Getenv("PORT")); port != "" {
+		if strings.Contains(port, ":") {
+			return port
+		}
+		return "0.0.0.0:" + port
+	}
+	// 兼容原 KOMARI_LISTEN 环境变量
+	if listen := strings.TrimSpace(os.Getenv("KOMARI_LISTEN")); listen != "" {
+		if strings.Contains(listen, ":") {
+			return listen
+		}
+		return "0.0.0.0:" + listen
+	}
+	// 默认监听地址
+	return "0.0.0.0:25774"
+}
+
 func init() {
-	// 从环境变量获取监听地址
-	listenAddr := GetEnv("KOMARI_LISTEN", "0.0.0.0:25774")
-	ServerCmd.PersistentFlags().StringVarP(&flags.Listen, "listen", "l", listenAddr, "监听地址 [env: KOMARI_LISTEN]")
+	listenAddr := resolveListenAddr()
+	ServerCmd.PersistentFlags().StringVarP(&flags.Listen, "listen", "l", listenAddr, "监听地址 [env: PORT 或 KOMARI_LISTEN]")
 	RootCmd.AddCommand(ServerCmd)
 }
 
