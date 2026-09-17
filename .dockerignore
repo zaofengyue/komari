@@ -1,0 +1,13 @@
+﻿.git
+.github
+data
+komari.db
+*.exe
+*.test
+*.out
+*.zip
+*.tar
+*.tar.gz
+*.tar.zst
+.vscode
+.idea

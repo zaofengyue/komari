@@ -1,14 +1,20 @@
-name: Publish Docker Image on Main
+name: Publish Docker Image
 
 on:
-  #push:
-  #  branches:
-  #    - main
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
   workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-frontend:
@@ -37,7 +43,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "stable"
+          check-latest: true
 
       - name: Install Zig
         uses: ./.github/actions/setup-zig
@@ -94,13 +101,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set lowercase image name
+        run: echo "IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}
           tags: |
-            type=raw,value=${{ github.ref_name }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+            type=ref,event=branch
+            type=ref,event=tag
             type=sha,format=short
 
       - name: Build and push Docker image
@@ -111,3 +123,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
